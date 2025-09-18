@@ -1,13 +1,28 @@
-// Scenario:
-// Find the three youngest engineers, sorted by youngest first.
+/*
+ * Scenario:
+ *   Find the three youngest engineers, sorted by youngest first.
+ *
+ * Solution Steps:
+ *   1. Index the collection on 'vocation' and 'dateofbirth' for efficient filtering and sorting.
+ *   2. Insert sample data into the 'persons' collection.
+ *   3. Build an aggregation pipeline:
+ *        - $match: Filter documents where vocation is 'ENGINEER'.
+ *        - $sort:  Sort by 'dateofbirth' descending (youngest first).
+ *        - $limit: Return only the top 3 results.
+ *        - $unset: Remove unwanted fields from the output.
+ *   4. Execute the aggregation pipeline.
+ *   5. (Optional) Use explain to verify index usage and query efficiency.
+ *
+ * This approach ensures the query is efficient and results are easy to interpret and practice.
+ */
 
 use("testdb");
 db.persons.drop();
 
-// Create index for efficient querying
+// 1. Create index for efficient querying (on vocation and dateofbirth)
 db.persons.createIndex({ vocation: 1, dateofbirth: 1 });
 
-// Insert sample data
+// 2. Insert sample data
 db.persons.insertMany([
     {
         person_id: "6392529400",
@@ -15,7 +30,7 @@ db.persons.insertMany([
         lastname: "Smith",
         dateofbirth: ISODate("1972-01-13T09:32:07Z"),
         vocation: "ENGINEER",
-        address: { number: 5625, street: "Tipa Circle", city: "Wojzinmoj" },
+        address: { number: 5625, street: "Tipa Circle", city: "Wojzinmoj" }
     },
     {
         person_id: "1723338115",
@@ -24,7 +39,7 @@ db.persons.insertMany([
         dateofbirth: ISODate("1985-05-12T23:14:30Z"),
         gender: "FEMALE",
         vocation: "ENGINEER",
-        address: { number: 9303, street: "Mele Circle", city: "Tobihbo" },
+        address: { number: 9303, street: "Mele Circle", city: "Tobihbo" }
     },
     {
         person_id: "8732762874",
@@ -32,7 +47,7 @@ db.persons.insertMany([
         lastname: "Jones",
         dateofbirth: ISODate("1991-11-23T16:53:56Z"),
         vocation: "POLITICIAN",
-        address: { number: 1, street: "High Street", city: "Upper Abbeywoodington" },
+        address: { number: 1, street: "High Street", city: "Upper Abbeywoodington" }
     },
     {
         person_id: "7363629563",
@@ -40,7 +55,7 @@ db.persons.insertMany([
         lastname: "Gooding",
         dateofbirth: ISODate("1941-04-07T22:11:52Z"),
         vocation: "FLORIST",
-        address: { number: 13, street: "Upper Bold Road", city: "Redringtonville" },
+        address: { number: 13, street: "Upper Bold Road", city: "Redringtonville" }
     },
     {
         person_id: "1029648329",
@@ -48,7 +63,7 @@ db.persons.insertMany([
         lastname: "Celements",
         dateofbirth: ISODate("1959-07-06T17:35:45Z"),
         vocation: "ENGINEER",
-        address: { number: 5, street: "Innings Close", city: "Basilbridge" },
+        address: { number: 5, street: "Innings Close", city: "Basilbridge" }
     },
     {
         person_id: "7363626383",
@@ -56,10 +71,11 @@ db.persons.insertMany([
         lastname: "Simmons",
         dateofbirth: ISODate("1998-12-26T13:13:55Z"),
         vocation: "ENGINEER",
-        address: { number: 187, street: "Hillside Road", city: "Kenningford" },
-    },
+        address: { number: 187, street: "Hillside Road", city: "Kenningford" }
+    }
 ]);
 
+// 3. Define aggregation pipeline
 const pipeline = [
     // Only engineers
     { $match: { vocation: "ENGINEER" } },
@@ -68,8 +84,11 @@ const pipeline = [
     // Take top 3
     { $limit: 3 },
     // Remove unwanted fields
-    { $unset: ["_id", "vocation", "address"] },
+    { $unset: ["_id", "vocation", "address"] }
 ];
 
+// 4. Run aggregation
 db.persons.aggregate(pipeline);
+
+// 5. Show explain plan (optional, for learning)
 db.persons.explain("executionStats").aggregate(pipeline);

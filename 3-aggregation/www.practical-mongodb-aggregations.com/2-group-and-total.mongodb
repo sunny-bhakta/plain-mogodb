@@ -1,18 +1,32 @@
-// Scenario:
-// Generate a report showing what each shop customer purchased in 2020.
-// Group orders by customer, capturing:
-// - First purchase date
-// - Number of orders
-// - Total value of orders
-// - List of order items sorted by date
+/*
+ * Scenario:
+ *   Generate a report showing what each shop customer purchased in 2020.
+ *   Group orders by customer, capturing:
+ *     - First purchase date
+ *     - Number of orders
+ *     - Total value of orders
+ *     - List of order items sorted by date
+ *
+ * Steps:
+ *   1. Index 'orderdate' for efficient filtering/sorting.
+ *   2. Insert sample data into 'orders'.
+ *   3. Build aggregation pipeline:
+ *      - $match: Filter 2020 orders
+ *      - $sort: Sort by 'orderdate' ascending
+ *      - $group: By 'customer_id', collect stats and orders
+ *      - $sort: Customers by first purchase date
+ *      - $set: Rename _id to customer_id
+ *      - $unset: Remove _id
+ *   4. Execute pipeline.
+ */
 
 db.dropDatabase();
 use("testdb");
 
-// Create index for orders collection
+// Index for efficient queries
 db.orders.createIndex({ orderdate: -1 });
 
-// Insert records into orders collection
+// Sample data
 db.orders.insertMany([
   {
     customer_id: "elise_smith@myemail.com",
@@ -62,7 +76,7 @@ db.orders.insertMany([
 ]);
 
 const pipeline = [
-  // Only orders from 2020
+  // 1. Only orders from 2020
   {
     $match: {
       orderdate: {
@@ -71,11 +85,11 @@ const pipeline = [
       },
     },
   },
-  // Sort by order date ascending
+  // 2. Sort by order date ascending
   {
     $sort: { orderdate: 1 },
   },
-  // Group by customer
+  // 3. Group by customer
   {
     $group: {
       _id: "$customer_id",
@@ -90,15 +104,15 @@ const pipeline = [
       },
     },
   },
-  // Sort customers by first purchase date
+  // 4. Sort customers by first purchase date
   {
     $sort: { first_purchase_date: 1 },
   },
-  // Rename _id to customer_id
+  // 5. Rename _id to customer_id
   {
     $set: { customer_id: "$_id" },
   },
-  // Remove _id field
+  // 6. Remove _id field
   {
     $unset: ["_id"],
   },

@@ -1,3 +1,19 @@
+/*
+ *  Scenario:
+ *  Generate a retail report that lists, for each expensive product (priced over $15), 
+ *  the total sales value and the quantity sold. 
+ *  The source data consists of shop orders, where each order contains an array of purchased products.
+ *
+ *  Steps:
+ *    1. Flatten the products array using $unwind so each product appears as a separate document.
+ *    2. Filter for products with a price greater than $15 using $match.
+ *    3. Group by product ID with $group, calculating:
+ *         - total_value: the sum of product prices
+ *         - quantity: the count of products sold
+ *    4. Rename the _id field to product_id using $set.
+ *    5. Remove the _id field using $unset.
+ */
+
 db = db.getSiblingDB("testdb");
 db.dropDatabase();
 
@@ -37,13 +53,13 @@ db.orders.insertMany([
 
 // Aggregation pipeline for retail report
 const pipeline = [
-  // Flatten products array
+  // 1. Flatten products array
   { $unwind: "$products" },
 
-  // Only expensive products (> $15)
+  // 2. Only expensive products (> $15)
   { $match: { "products.price": { $gt: NumberDecimal("15.00") } } },
 
-  // Group by product ID
+  // 3. Group by product ID
   {
     $group: {
       _id: "$products.prod_id",
@@ -53,10 +69,10 @@ const pipeline = [
     },
   },
 
-  // Rename _id to product_id
+  // 4. Rename _id to product_id
   { $set: { product_id: "$_id" } },
 
-  // Remove _id field
+  // 5. Remove _id field
   { $unset: "_id" },
 ];
 

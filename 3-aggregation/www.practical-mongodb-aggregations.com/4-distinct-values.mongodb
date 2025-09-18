@@ -1,6 +1,20 @@
-// Scenario:
-// Query a collection of persons where each document contains one or more languages spoken.
-// The result should be an alphabetically sorted list of unique languages for a UI drop-down.
+/*
+* Scenario:
+* You have a MongoDB collection named 'persons'. Each document in this collection represents a person and contains a 'language' field. 
+* The 'language' field can either be a single string (for one language) or an array of strings (for multiple languages), 
+* indicating the languages spoken by that person.
+*
+* Goal:
+* Generate an alphabetically sorted list of all unique languages spoken by people in the collection. 
+* This list should be suitable for use in a UI dropdown menu.
+*
+* Approach:
+* 1. Use $addFields to ensure the 'language' field is always treated as an array.
+* 2. Use $unwind to flatten the 'language' array so each language appears in its own document.
+* 3. Use $group to collect distinct language values.
+* 4. Use $sort to order the languages alphabetically.
+* 5. Use $project to rename _id to 'language' and remove the _id field from the output.
+*/
 
 db = db.getSiblingDB("testdb");
 db.dropDatabase();
@@ -17,20 +31,35 @@ db.persons.insertMany([
   { firstname: "Carl", lastname: "Simmons", vocation: "ENGINEER", language: "English" },
   { firstname: "Diego", lastname: "Lopez", vocation: "CHEF", language: "Spanish" },
   { firstname: "Helmut", lastname: "Schneider", vocation: "NURSE", language: "German" },
-  { firstname: "Valerie", lastname: "Dubois", vocation: "SCIENTIST", language: "French" },
+  { firstname: "Valerie", lastname: "Dubois", vocation: "SCIENTIST", language: "French" }
 ]);
 
 // Aggregation pipeline to get unique, sorted languages
 const pipeline = [
-  // Ensure 'language' is always an array
-  { $addFields: { language: { $cond: [{ $isArray: "$language" }, "$language", ["$language"] ] } } },
-  // Unwind the 'language' array
+
+  // 1. Ensure 'language' is always an array (handles both string and array cases)
+  {
+    $addFields: {
+      language: {
+        $cond: [
+          { $isArray: "$language" }, // If 'language' is already an array
+          "$language",               // use as is
+          ["$language"]              // else wrap single value in an array
+        ]
+      }
+    }
+  },
+
+  // 2. Unwind the 'language' array so each language appears in its own document
   { $unwind: "$language" },
-  // Group by language to get distinct values
+
+  // 3. Group by language to get distinct values
   { $group: { _id: "$language" } },
-  // Sort languages alphabetically
+
+  // 4. Sort languages alphabetically
   { $sort: { _id: 1 } },
-  // Rename _id to language and remove _id field
+
+  // 5. Rename _id to 'language' and remove _id field from output
   { $project: { language: "$_id", _id: 0 } }
 ];
 
