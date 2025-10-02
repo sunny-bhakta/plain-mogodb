@@ -1,0 +1,112 @@
+// Helper function to reset and select the test database
+const dropDB = () => {
+  db = db.getSiblingDB("testdb");
+  db.dropDatabase();
+  use("testdb");
+};
+
+
+// const ifElse = () => {
+//   dropDB();
+//   // --- Setup: Insert sample order ---
+//   db.orders.insertMany([
+//     { product: "WizzyWidget", price: 25.99, qty: 8 }, // Should get discount
+//   ]);
+
+//   // --- Aggregation Pipeline ---
+//   // If qty >= 5, apply 10% discount; else, regular price
+//   var pipeline = [
+//     {
+//       $set: {
+//         cost: {
+//           $cond: {
+//             if: { $gte: ["$qty", 5] }, // If quantity is 5 or more
+//             then: { $multiply: ["$price", "$qty", 0.9] }, // Apply 10% discount
+//             else: { $multiply: ["$price", "$qty"] }, // No discount
+//           },
+//         },
+//       },
+//     },
+//   ];
+
+//   // Run the aggregation and view the result
+//   return db.orders.aggregate(pipeline);
+// };
+
+
+// // Function to convert all product names in the products array to uppercase
+// const toUpperCase = () => {
+//   dropDB();
+//   // --- Setup: Insert sample order with products array ---
+//   db.orders.insertMany([
+//     {
+//       orderId: "AB12345",
+//       products: ["Laptop", "Kettle", "Phone", "Microwave"],
+//     },
+//   ]);
+
+//   // --- Aggregation Pipeline ---
+//   // Use $map to iterate over products array and $toUpper to convert each item to uppercase
+//   var pipeline = [
+//     {
+//       $set: {
+//         products: {
+//           $map: {
+//             input: "$products",
+//             as: "item",
+//             in: { $toUpper: "$$item" }, // Convert each product name to uppercase
+//           },
+//         },
+//       },
+//     },
+//   ];
+
+//   // Run the aggregation and return the result
+//   return db.orders.aggregate(pipeline);
+// };
+
+
+
+// Function to join product names in the products array into a single delimited string
+const delimiter = () => {
+  dropDB();
+
+  // --- Setup: Insert sample order with products array ---
+  db.orders.insertMany([
+    {
+      orderId: "AB12345",
+      products: ["Laptop", "Kettle", "Phone", "Microwave"],
+    },
+  ]);
+
+  // --- Aggregation Pipeline ---
+  // Use $reduce to concatenate product names with a delimiter
+  var pipeline = [
+    {
+      $set: {
+        productsList: {
+          $reduce: {
+            input: "$products", // Array to process
+            initialValue: "",   // Start with empty string
+            in: {
+              $concat: ["$$value", "$$this", "; "], // Append each product name with delimiter
+            },
+          },
+        },
+      },
+    },
+  ];
+
+  // Run the aggregation and return the result
+  return db.orders.aggregate(pipeline);
+};
+
+
+
+// Execute the function to run the scenario
+// ifElse();
+
+// toUpperCase();
+
+
+delimiter();

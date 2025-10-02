@@ -1,152 +1,131 @@
 /*
  * Scenario:
- *   Yo
+ *   An application is ingesting payment documents into a MongoDB collection where each document's payment date field contains a string looking vaguely like a date-time, such as "01-JAN-20 01.01.01.123000000". You want to convert each payment date into a valid BSON date type when aggregating the payments. However, the payment date fields do not contain all the information required for you to determine the exact date-time accurately. Therefore you cannot use just the MongoDB's Date Operator Expressions directly to perform the text-to-date conversion. Each of these text fields is missing the following information:
  *
- * Goal:
- *   
+ *     - The specific century (1900s?, 2000s, other?)
+ *     - The specific time-zone (GMT?, IST?, PST?, other?)
+ *     - The specific language that the three-letter month abbreviation represents (is "JAN" in French? in English? other?)
  *
- * Approach:
- *   1. 
- *   
+ *   You subsequently learn that all the payment records are for the 21st century only, the time-zone used when ingesting is UTC, and the month abbreviations are in English.
+ *
+ * Context:
+ *   Suppose you have a MongoDB collection where each document has a payment date stored as a string,
+ *   for example: "01-JAN-20 01.01.01.123000000". These strings are not in a standard ISO format,
+ *   and lack some details needed for direct conversion, such as the full year and timezone.
+ *
+ *   After investigation, you confirm:
+ *     - All years are in the 2000s (21st century)
+ *     - All times are in UTC
+ *     - Month abbreviations are in English
+ *
+ * Objective:
+ *   Transform these string dates into BSON date objects during aggregation.
+ *
+ * Method:
+ *   - Use $set to add a new field with the parsed date.
+ *   - Use $let to define variables for parts of the string.
+ *   - Use $substrCP to extract day, month, year, and time components.
+ *   - Use $switch to convert month abbreviations to their numeric equivalents.
+ *   - Concatenate these components into a standard date string format.
+ *   - Finally, use $dateFromString to convert the concatenated string into a BSON date.
+ *   - Use $unset to remove any unwanted fields from the output.
  *
  * Note:
- *   A
+ *   This approach assumes all date strings follow the same pattern and context.
  */
 
+
+// Switch to the test database and drop it to start fresh
 db = db.getSiblingDB("testdb");
 db.dropDatabase();
 
 use("testdb");
 
-// Insert products
-db.products.insertMany([
-  {
-    name: "Asus Laptop",
-    variation: "Ultra HD",
-    category: "ELECTRONICS",
-    description: "Great for watching movies",
-  },
-  {
-    name: "Asus Laptop",
-    variation: "Normal Display",
-    category: "ELECTRONICS",
-    description: "Good value laptop for students",
-  },
-  {
-    name: "The Day Of The Triffids",
-    variation: "1st Edition",
-    category: "BOOKS",
-    description: "Classic post-apocalyptic novel",
-  },
-  {
-    name: "The Day Of The Triffids",
-    variation: "2nd Edition",
-    category: "BOOKS",
-    description: "Classic post-apocalyptic novel",
-  },
-  {
-    name: "Morphy Richards Food Mixer",
-    variation: "Deluxe",
-    category: "KITCHENWARE",
-    description: "Luxury mixer turning good cakes into great",
-  },
-  {
-    name: "Karcher Hose Set",
-    variation: "Full Monty",
-    category: "GARDEN",
-    description: "Hose + nozzles + winder for tidy storage",
-  },
+// Insert sample payment records with incomplete date strings
+db.payments.insertMany([
+  { "account": "010101", "paymentDate": "01-JAN-20 01.01.01.123000000", "amount": 1.01 },
+  { "account": "020202", "paymentDate": "02-FEB-20 02.02.02.456000000", "amount": 2.02 },
+  { "account": "030303", "paymentDate": "03-MAR-20 03.03.03.789000000", "amount": 3.03 },
+  { "account": "040404", "paymentDate": "04-APR-20 04.04.04.012000000", "amount": 4.04 },
+  { "account": "050505", "paymentDate": "05-MAY-20 05.05.05.345000000", "amount": 5.05 },
+  { "account": "060606", "paymentDate": "06-JUN-20 06.06.06.678000000", "amount": 6.06 },
+  { "account": "070707", "paymentDate": "07-JUL-20 07.07.07.901000000", "amount": 7.07 },
+  { "account": "080808", "paymentDate": "08-AUG-20 08.08.08.234000000", "amount": 8.08 },
+  { "account": "090909", "paymentDate": "09-SEP-20 09.09.09.567000000", "amount": 9.09 },
+  { "account": "101010", "paymentDate": "10-OCT-20 10.10.10.890000000", "amount": 10.10 },
+  { "account": "111111", "paymentDate": "11-NOV-20 11.11.11.111000000", "amount": 11.11 },
+  { "account": "121212", "paymentDate": "12-DEC-20 12.12.12.999000000", "amount": 12.12 }
 ]);
 
-// Create compound index for efficient lookup
-db.orders.createIndex({ product_name: 1, product_variation: 1, orderdate: 1 });
-
-// Insert orders
-db.orders.insertMany([
+// Aggregation pipeline to convert paymentDate string to BSON date
+const pipeline = [
   {
-    customer_id: "elise_smith@myemail.com",
-    orderdate: ISODate("2020-05-30T08:35:52Z"),
-    product_name: "Asus Laptop",
-    product_variation: "Normal Display",
-    value: NumberDecimal("431.43"),
-  },
-  {
-    customer_id: "tj@wheresmyemail.com",
-    orderdate: ISODate("2019-05-28T19:13:32Z"),
-    product_name: "The Day Of The Triffids",
-    product_variation: "2nd Edition",
-    value: NumberDecimal("5.01"),
-  },
-  {
-    customer_id: "oranieri@warmmail.com",
-    orderdate: ISODate("2020-01-01T08:25:37Z"),
-    product_name: "Morphy Richards Food Mixer",
-    product_variation: "Deluxe",
-    value: NumberDecimal("63.13"),
-  },
-  {
-    customer_id: "jjones@tepidmail.com",
-    orderdate: ISODate("2020-12-26T08:55:46Z"),
-    product_name: "Asus Laptop",
-    product_variation: "Normal Display",
-    value: NumberDecimal("429.65"),
-  },
-]);
-
-
-var pipeline = [
-  // 1. Join products to orders using $lookup on two fields (name and variation)
-  {
-    $lookup: {
-      from: "orders",
-      let: {
-        prdname: "$name",
-        prdvartn: "$variation",
-      },
-      pipeline: [
-        // a. Match orders with matching product_name and product_variation
-        {
-          $match: {
-            $expr: {
-              $and: [
-                { $eq: ["$product_name", "$$prdname"] },
-                { $eq: ["$product_variation", "$$prdvartn"] },
-              ],
-            },
+    $set: {
+      // Replace paymentDate with a parsed BSON date
+      paymentDate: {
+        $let: {
+          vars: {
+            txt: "$paymentDate", // Original date string
+            month: { $substrCP: ["$paymentDate", 3, 3] } // Extract month abbreviation
           },
-        },
-        // b. Only include orders from 2020
-        {
-          $match: {
-            orderdate: {
-              $gte: ISODate("2020-01-01T00:00:00Z"),
-              $lt: ISODate("2021-01-01T00:00:00Z"),
-            },
-          },
-        },
-        // c. Remove unwanted fields from orders
-        {
-          $unset: [
-            "_id",
-            "product_name",
-            "product_variation",
-          ],
-        },
-      ],
-      as: "orders",
-    },
+          in: {
+            // Convert the constructed string to a BSON date
+            $dateFromString: {
+              format: "%d-%m-%Y %H.%M.%S.%L", // Target format
+              dateString: {
+                $concat: [
+                  // Day part (e.g., "01-")
+                  { $substrCP: ["$$txt", 0, 3] },
+                  // Convert month abbreviation to number (e.g., "JAN" -> "01")
+                  {
+                    $switch: {
+                      branches: [
+                        { case: { $eq: ["$$month", "JAN"] }, then: "01" },
+                        { case: { $eq: ["$$month", "FEB"] }, then: "02" },
+                        { case: { $eq: ["$$month", "MAR"] }, then: "03" },
+                        { case: { $eq: ["$$month", "APR"] }, then: "04" },
+                        { case: { $eq: ["$$month", "MAY"] }, then: "05" },
+                        { case: { $eq: ["$$month", "JUN"] }, then: "06" },
+                        { case: { $eq: ["$$month", "JUL"] }, then: "07" },
+                        { case: { $eq: ["$$month", "AUG"] }, then: "08" },
+                        { case: { $eq: ["$$month", "SEP"] }, then: "09" },
+                        { case: { $eq: ["$$month", "OCT"] }, then: "10" },
+                        { case: { $eq: ["$$month", "NOV"] }, then: "11" },
+                        { case: { $eq: ["$$month", "DEC"] }, then: "12" }
+                      ],
+                      default: "ERROR"
+                    }
+                  },
+                  // Add century to year (e.g., "-20")
+                  "-20",
+                  // Append the rest of the string (year, time, milliseconds)
+                  { $substrCP: ["$$txt", 7, 15] }
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
   },
-  // 2. Only include products that have at least one order in 2020
   {
-    $match: {
-      orders: { $ne: [] },
-    },
-  },
-  // 3. Remove unwanted fields from products
-  {
-    $unset: ["_id"],
-  },
+    // Remove the _id field from the output
+    $unset: [
+      "_id"
+    ]
+  }
 ];
 
+// Run the aggregation and return the results as an array
+db.payments.aggregate(pipeline).toArray();
 
-db.products.aggregate(pipeline).toArray();
+/*
+Explanation:
+- The script first inserts sample payment records with date strings.
+- The aggregation pipeline uses $set to replace the paymentDate field with a BSON date.
+- $let extracts the month abbreviation and original string.
+- $switch maps the month abbreviation to its numeric value.
+- $concat builds a new date string in the format "%d-%m-%Y %H.%M.%S.%L".
+- $dateFromString parses this string into a BSON date.
+- $unset removes the _id field for cleaner output.
+*/

@@ -1,0 +1,111 @@
+/*
+ * Scenario:
+ *   You want to provide a faceted search capability on your retail website,
+ *   enabling customers to refine their product search by selecting specific
+ *   characteristics (facets) such as product rating or price. Each facet is
+ *   broken down into sub-ranges (e.g., 4-5 stars for rating), allowing customers
+ *   to filter products more precisely. The aggregation pipeline analyzes the
+ *   products collection by each facet's field (rating and price) to determine
+ *   the spread of values for each facet.
+ *
+ * Context:
+ *   All payment records are for the 21st century only.
+ *   The time-zone used during ingestion is UTC, and month abbreviations are in English.
+ *
+ * Objective:
+ *   Provide a faceted classification of products by price and rating ranges
+ *   for use in a faceted search UI.
+ *
+ * Method:
+ *   1. Use MongoDB's $facet stage to produce multiple grouped outputs in a single aggregation.
+ *   2. In the by_price facet:
+ *      a. Use $bucketAuto to automatically bucket products into 3 price ranges (with granularity for nice boundaries).
+ *      b. Add a field for the price range boundaries using $set.
+ *      c. Remove the _id field (now replaced by price_range) using $unset.
+ *   3. In the by_rating facet:
+ *      a. Use $bucketAuto to automatically bucket products into 5 rating ranges.
+ *      b. Add a field for the rating range boundaries using $set.
+ *      c. Remove the _id field (now replaced by rating_range) using $unset.
+ *   4. The output is structured to support a faceted search interface, with each facet producing a list of ranges with counts and product names.
+ *
+ * Note:
+ *   Adjust the number of buckets or granularity as needed for your UI requirements.
+ */
+
+// --- Setup: Reset and populate the test database ---
+db = db.getSiblingDB("testdb");
+db.dropDatabase();
+use("testdb");
+
+// Insert first batch of products
+db.products.insertMany([
+  { name: "Asus Laptop", category: "ELECTRONICS", description: "Good value laptop for students", price: NumberDecimal("431.43"), rating: NumberDecimal("4.2") },
+  { name: "The Day Of The Triffids", category: "BOOKS", description: "Classic post-apocalyptic novel", price: NumberDecimal("5.01"), rating: NumberDecimal("4.8") },
+  { name: "Morphy Richardds Food Mixer", category: "KITCHENWARE", description: "Luxury mixer turning good cakes into great", price: NumberDecimal("63.13"), rating: NumberDecimal("3.8") },
+  { name: "Karcher Hose Set", category: "GARDEN", description: "Hose + nozzles + winder for tidy storage", price: NumberDecimal("22.13"), rating: NumberDecimal("4.3") },
+  { name: "Oak Coffee Table", category: "HOME", description: "size is 2m x 0.5m x 0.4m", price: NumberDecimal("22.13"), rating: NumberDecimal("3.8") },
+  { name: "Lenovo Laptop", category: "ELECTRONICS", description: "High spec good for gaming", price: NumberDecimal("1299.99"), rating: NumberDecimal("4.1") },
+  { name: "One Day in the Life of Ivan Denisovich", category: "BOOKS", description: "Brutal life in a labour camp", price: NumberDecimal("4.29"), rating: NumberDecimal("4.9") },
+  { name: "Russell Hobbs Chrome Kettle", category: "KITCHENWARE", description: "Nice looking budget kettle", price: NumberDecimal("15.76"), rating: NumberDecimal("3.9") },
+]);
+
+// Insert second batch of products
+db.products.insertMany([
+  { name: "Tiffany Gold Chain", category: "JEWELERY", description: "Looks great for any age and gender", price: NumberDecimal("582.22"), rating: NumberDecimal("4.0") },
+  { name: "Raleigh Racer 21st Century Classic", category: "BICYCLES", description: "Modern update to a classic 70s bike design", price: NumberDecimal("523.00"), rating: NumberDecimal("4.5") },
+  { name: "Diesel Flare Jeans", category: "CLOTHES", description: "Top end casual look", price: NumberDecimal("129.89"), rating: NumberDecimal("4.3") },
+  { name: "Jazz Silk Scarf", category: "CLOTHES", description: "Style for the winder months", price: NumberDecimal("28.39"), rating: NumberDecimal("3.7") },
+  { name: "Dell XPS 13 Laptop", category: "ELECTRONICS", description: "Developer edition", price: NumberDecimal("1399.89"), rating: NumberDecimal("4.4") },
+  { name: "NY Baseball Cap", category: "CLOTHES", description: "Blue & white", price: NumberDecimal("18.99"), rating: NumberDecimal("4.0") },
+  { name: "Tots Flower Pots", category: "GARDEN", description: "Set of three", price: NumberDecimal("9.78"), rating: NumberDecimal("4.1") },
+  { name: "Picky Pencil Sharpener", category: "Stationery", description: "Ultra budget", price: NumberDecimal("0.67"), rating: NumberDecimal("1.2") },
+]);
+
+// --- Faceted Aggregation Pipeline ---
+var pipeline = [
+  {
+    // Use $facet to produce multiple grouped outputs in a single aggregation
+    $facet: {
+      // Facet 1: Group products by price ranges
+      by_price: [
+        // Automatically bucket products into 3 price ranges (granularity helps with nice boundaries)
+        {
+          $bucketAuto: {
+            groupBy: "$price",
+            buckets: 3,
+            granularity: "1-2-5",
+            output: {
+              count: { $sum: 1 },
+              products: { $push: "$name" },
+            },
+          },
+        },
+        // Add a field for the price range boundaries
+        { $set: { price_range: "$_id" } },
+        // Remove the _id field (now replaced by price_range)
+        { $unset: ["_id"] },
+      ],
+      // Facet 2: Group products by rating ranges
+      by_rating: [
+        // Automatically bucket products into 5 rating ranges
+        {
+          $bucketAuto: {
+            groupBy: "$rating",
+            buckets: 5,
+            output: {
+              count: { $sum: 1 },
+              products: { $push: "$name" },
+            },
+          },
+        },
+        // Add a field for the rating range boundaries
+        { $set: { rating_range: "$_id" } },
+        // Remove the _id field (now replaced by rating_range)
+        { $unset: ["_id"] },
+      ],
+    },
+  },
+];
+
+// Run the aggregation and return the results as an array
+db.products.aggregate(pipeline);

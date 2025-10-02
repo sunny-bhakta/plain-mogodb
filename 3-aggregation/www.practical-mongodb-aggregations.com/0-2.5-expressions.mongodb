@@ -1,0 +1,33 @@
+/*
+ * Scenario:
+ *   Using $expr inside $match to compare fields within the same document.
+ *
+ * Method:
+ *   Use $expr to perform operations (like $multiply, $gt) on document fields directly in the $match stage.
+ */
+
+// Insert sample documents with width and height fields
+db.areas.insertMany([
+  { _id: 1, width: 2, height: 8 },
+  { _id: 2, width: 3, height: 4 },
+  { _id: 3, width: 20, height: 1 }
+]
+);
+// Each document represents a rectangle with width and height
+// We'll filter for rectangles with area greater than 12
+var pipeline = [
+  {
+    $match: {
+      $expr: {
+        $gt: [
+          {
+            $multiply: ["$height", "$width"],
+          },
+          12,
+        ],
+      },
+    },
+  },
+]
+
+db.areas.aggregate(pipeline);

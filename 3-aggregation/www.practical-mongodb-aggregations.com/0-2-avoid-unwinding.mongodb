@@ -1,0 +1,68 @@
+/*
+ * Scenario:
+ *   Avoid unwinding and regrouping documents just to process array elements.
+ *   Instead, use array operators to filter or transform arrays in-place.
+ *
+ * Method:
+ *   Use $set with $filter to process array elements directly, keeping documents intact.
+ */
+
+// --- Setup: Reset and populate the test database ---
+db = db.getSiblingDB("testdb");
+db.dropDatabase();
+use("testdb");
+
+// Insert sample orders, each with an array of products
+// Each order contains one or more products, each with prod_id, name, and price
+db.orders.insertMany([
+  {
+    _id: 1197372932325,
+    products: [
+      {
+        prod_id: 'abc12345',
+        name: 'Asus Laptop',
+        price: NumberDecimal('429.99'),
+      },
+    ],
+  },
+  {
+    _id: 4433997244387,
+    products: [
+      {
+        prod_id: 'def45678',
+        name: 'Karcher Hose Set',
+        price: NumberDecimal('23.43'),
+      },
+      {
+        prod_id: 'jkl77336',
+        name: 'Picky Pencil Sharpener',
+        price: NumberDecimal('0.67'),
+      },
+      {
+        prod_id: 'xyz11228',
+        name: 'Russell Hobbs Chrome Kettle',
+        price: NumberDecimal('15.76'),
+      },
+    ],
+  },
+]);
+
+// --- Optimal Array Processing Pipeline ---
+// This pipeline filters out products valued at 15.00 or less, without unwinding/regrouping
+
+var pipeline = [
+  {
+    $set: {
+      products: {
+        $filter: {
+          input: "$products",
+          as: "product",
+          cond: { $gt: ["$$product.price", NumberDecimal("15.00")] },
+        },
+      },
+    },
+  },
+];
+
+// Run the aggregation and return the results as an array
+db.orders.aggregate(pipeline);
